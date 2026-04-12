@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- PWA / iPhone home screen tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Training" />
+  <meta name="theme-color" content="#0F0F0F" />
+  <title>Training</title>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: #0F0F0F; color: #E8E0D0; font-family: Georgia, 'Times New Roman', serif;
+           min-height: 100vh; min-height: -webkit-fill-available; overscroll-behavior: none; }
+    input { -webkit-appearance: none; border-radius: 2px; }
+    button { -webkit-appearance: none; }
+    /* Safe area padding for notch/home indicator */
+    #root { padding-bottom: env(safe-area-inset-bottom); }
+  </style>
+
+  <!-- React + Babel from CDN — no build step needed -->
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ── STORAGE (localStorage instead of window.storage) ──────────────────
+    const STORAGE_KEY   = "trainer_log_v1";
+    const ROTATION_KEY  = "trainer_rotation_v1";
+
+    function loadLog()      { try { const v = localStorage.getItem(STORAGE_KEY);   return v ? JSON.parse(v) : {}; }                    catch { return {}; } }
+    function saveLog(log)   { try { localStorage.setItem(STORAGE_KEY,   JSON.stringify(log));  } catch {} }
+    function loadRotation() { try { const v = localStorage.getItem(ROTATION_KEY); return v ? JSON.parse(v) : { current: 0, history: [] }; } catch { return { current: 0, history: [] }; } }
+    function saveRotation(r){ try { localStorage.setItem(ROTATION_KEY, JSON.stringify(r));    } catch {} }
+
+    // ── PLAN DATA ──────────────────────────────────────────────────────────
+    const SESSIONS = [
+      {
+        id: "A", tag: "PUSH", label: "Chest & Triceps", color: "#D4A843", duration: "~45 min",
+        why: "Your primary strength session. Dumbbell pressing builds the chest, anterior shoulders, and triceps — the core muscle groups for bulking your upper body. We use dumbbells (not a barbell) because each arm moves independently, which reduces asymmetrical stress on your lower back. Controlled descent on every rep (3 seconds down) maximizes time under tension and protects your shoulder joints. Two presses followed by two tricep isolation moves and a farmers carry — efficient and complete in 45 minutes.",
+        warmup: "5 min walk/jog · Hip flexor stretch 60s each · Arm circles 10 each way",
+        exercises: [
+          { key:"db_bench",     name:"Dumbbell Bench Press",   sets:3, reps:10, weight:45, unit:"lb",       note:"3-sec descent. Stop 1–2 reps before failure." },
+          { key:"incline_db",   name:"Incline DB Press",       sets:3, reps:10, weight:30, unit:"lb",       note:"30° incline. Upper chest. Don't flare elbows." },
+          { key:"tri_pulldown", name:"Tricep Pulldown (rope)", sets:3, reps:12, weight:30, unit:"lb",       note:"Elbows pinned. Full extension at bottom." },
+          { key:"skull_crush",  name:"Skull Crusher",          sets:3, reps:10, weight:30, unit:"lb",       note:"Slow tempo. Skip if elbows feel strained." },
+          { key:"farmers_a",    name:"Farmers Carry",          sets:3, reps:1,  weight:35, unit:"kg/hand",  note:"~20 yards. Tall posture, core braced." },
+        ],
+      },
+      {
+        id: "B", tag: "PULL", label: "Back & Biceps", color: "#4A8BC4", duration: "~45 min",
+        why: "This session counteracts everything your desk job does to your posture. Sitting hunched forward shortens your chest and weakens your upper back — pulling movements reverse that. Assisted chin-ups are the single best exercise you can do: they build lats, biceps, and rear delts simultaneously while also improving shoulder health. Your goal is to lower the assist weight by 5–10lb every 2–3 weeks. Rows reinforce the mid-back and literally help decompress your lumbar spine after hours at a desk.",
+        warmup: "5 min easy bike/peloton · Band pull-aparts 15 reps · Lat hang 30 sec",
+        exercises: [
+          { key:"chin_up",   name:"Assisted Chin-Up",    sets:4, reps:8,  weight:70, unit:"lb assist",  note:"Lower assist over time. Goal: unassisted by fall." },
+          { key:"lat_pull",  name:"Lat Pulldown",        sets:3, reps:10, weight:85, unit:"lb",          note:"Full stretch at top. Drive elbows to hips." },
+          { key:"db_row",    name:"Single-Arm DB Row",   sets:3, reps:10, weight:35, unit:"lb",          note:"Brace core. Row to hip, not armpit." },
+          { key:"bi_curl",   name:"Seated Incline Curl", sets:3, reps:8,  weight:25, unit:"lb",          note:"Incline isolates the long head. No swinging." },
+          { key:"farmers_b", name:"Farmers Carry",       sets:3, reps:1,  weight:30, unit:"kg/hand",     note:"Reinforces posture after pulling. Core tight." },
+        ],
+      },
+      {
+        id: "C", tag: "LEGS + CORE", label: "Lower Body & Core", color: "#5BA85B", duration: "~45 min",
+        why: "This is your most important injury-prevention session. Tight hip flexors from desk work are the #1 cause of lower back pain — and your history of throwing out your back is almost certainly linked to this. Kettlebell squats and deadlifts teach your hips and posterior chain to work correctly without the spinal compression of a barbell. The core circuit at the end builds deep stabilizers (not just surface abs) that act as a natural back brace. The 10-minute warmup here is not optional — it is the session.",
+        warmup: "10 min: 90/90 hip stretch 60s each · World's greatest stretch 5/side · Glute bridge 10 reps",
+        exercises: [
+          { key:"kb_squat",  name:"KB Suitcase Squat", sets:3, reps:10, weight:32, unit:"kg", note:"Upright torso. Pause 1 sec at bottom. No knee cave." },
+          { key:"kb_dead",   name:"KB Deadlift",       sets:3, reps:10, weight:32, unit:"kg", note:"Hinge at hips, flat back. Feel the hamstrings load." },
+          { key:"leg_curl",  name:"Leg Curl Machine",  sets:3, reps:10, weight:70, unit:"lb", note:"Protects knees. Slow return, full ROM." },
+          { key:"dead_bug",  name:"Dead Bug",          sets:3, reps:10, weight:0,  unit:"BW", note:"Back pressed to floor at all times. Slow and deliberate." },
+          { key:"plank",     name:"Plank",             sets:3, reps:1,  weight:0,  unit:"BW", note:"40 sec. Hips level. Breathe through it." },
+          { key:"mtn_climb", name:"Mountain Climber",  sets:3, reps:1,  weight:0,  unit:"BW", note:"30 sec controlled. Not a sprint." },
+        ],
+      },
+    ];
+
+    // ── RECOMMENDATION ENGINE ──────────────────────────────────────────────
+    function getRec(exKey, log) {
+      let ex = null;
+      for (const s of SESSIONS) { const f = s.exercises.find(e => e.key === exKey); if (f) { ex = f; break; } }
+      if (!ex) return null;
+      const entries = (log[exKey] || []).slice().sort((a,b) => b.ts - a.ts);
+      const bw = ex.unit === "BW";
+      if (entries.length === 0) return { weight: ex.weight, reps: ex.reps, sets: ex.sets, reason: "Starting baseline from your history", isNew: true };
+      const last = entries[0], prev = entries[1];
+      if (bw) return { weight: 0, reps: last.reps, sets: last.sets, reason: "Bodyweight — focus on form and duration" };
+      const hitTarget = last.reps >= ex.reps && last.sets >= ex.sets;
+      const prevHit   = prev && prev.reps >= ex.reps && prev.sets >= ex.sets;
+      if (hitTarget && prevHit) {
+        const bump = ex.unit.includes("kg") ? 2 : 5;
+        return { weight: last.weight + bump, reps: ex.reps, sets: ex.sets, reason: `Hit target 2 sessions in a row — add ${bump}${ex.unit.includes("kg")?"kg":"lb"}`, upgrade: true };
+      }
+      if (last.reps < ex.reps - 2) {
+        const drop = ex.unit.includes("kg") ? 2 : 5;
+        return { weight: Math.max(last.weight - drop, 0), reps: ex.reps, sets: ex.sets, reason: "Reps were low — slight deload to lock in form", deload: true };
+      }
+      if (hitTarget && !prevHit) return { weight: last.weight, reps: ex.reps, sets: ex.sets, reason: "Good session — hold weight and confirm again" };
+      return { weight: last.weight, reps: Math.min(last.reps + 1, ex.reps), sets: ex.sets, reason: last.reps < ex.reps ? "Add 1 rep — building toward target" : "Maintain weight, focus on tempo" };
+    }
+
+    // ── STYLES ─────────────────────────────────────────────────────────────
+    const inp = { background:"#0a0a0a", border:"1px solid #2a2a2a", borderRadius:"2px", padding:"8px 10px", color:"#E8E0D0", fontFamily:"monospace", fontSize:"16px", outline:"none" };
+
+    // ── EXERCISE CARD ──────────────────────────────────────────────────────
+    function ExCard({ ex, log, onLog, sessionColor }) {
+      const [open, setOpen]   = useState(false);
+      const rec               = getRec(ex.key, log);
+      const bw                = ex.unit === "BW";
+      const [w, setW]         = useState(rec?.weight ?? ex.weight);
+      const [r, setR]         = useState(rec?.reps   ?? ex.reps);
+      const [s, setS]         = useState(rec?.sets   ?? ex.sets);
+      const [note, setNote]   = useState("");
+
+      useEffect(() => { if (rec) { setW(rec.weight); setR(rec.reps); setS(rec.sets); } }, [ex.key]);
+
+      const last      = (log[ex.key] || []).slice().sort((a,b) => b.ts - a.ts)[0];
+      const recBg     = rec?.upgrade ? "#0e1a0e" : rec?.deload ? "#1a0e0e" : rec?.isNew ? "#0e0e1a" : "#111";
+      const recColor  = rec?.upgrade ? "#5BA85B" : rec?.deload ? "#C86B4A" : rec?.isNew ? "#4A8BC4" : "#888";
+      const recLabel  = rec?.upgrade ? "↑ Level Up" : rec?.deload ? "↓ Deload" : rec?.isNew ? "★ Starting" : "→ Target";
+
+      return (
+        <div style={{ background:"#0d0d0d", border:"1px solid #1a1a1a", borderRadius:"2px", padding:"14px 16px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:"8px" }}>
+            <div>
+              <div style={{ fontSize:"15px", color:"#E8E0D0", marginBottom:"3px" }}>{ex.name}</div>
+              <div style={{ fontSize:"12px", color:"#555", fontStyle:"italic" }}>{ex.note}</div>
+            </div>
+            <div style={{ fontSize:"11px", color:sessionColor, fontFamily:"monospace", whiteSpace:"nowrap", paddingTop:"2px" }}>
+              {ex.sets}×{ex.reps}{!bw ? ` · ${ex.weight}${ex.unit}` : ""}
+            </div>
+          </div>
+
+          {rec && (
+            <div style={{ marginTop:"10px", background:recBg, border:`1px solid ${recColor}22`, borderRadius:"2px", padding:"10px 12px" }}>
+              <div style={{ fontSize:"9px", letterSpacing:"2px", textTransform:"uppercase", color:recColor, marginBottom:"6px" }}>{recLabel}</div>
+              <div style={{ display:"flex", gap:"16px", alignItems:"baseline", flexWrap:"wrap" }}>
+                {!bw && <span style={{ fontSize:"18px", color:"#F0E8D8", fontFamily:"monospace" }}>{rec.weight}<span style={{ fontSize:"11px", color:"#555", marginLeft:"3px" }}>{ex.unit}</span></span>}
+                <span style={{ fontSize:"18px", color:"#F0E8D8", fontFamily:"monospace" }}>{rec.sets}<span style={{ fontSize:"11px", color:"#555", marginLeft:"2px" }}>sets</span></span>
+                <span style={{ fontSize:"18px", color:"#F0E8D8", fontFamily:"monospace" }}>{rec.reps}<span style={{ fontSize:"11px", color:"#555", marginLeft:"2px" }}>reps</span></span>
+              </div>
+              <div style={{ fontSize:"11px", color:"#555", fontStyle:"italic", marginTop:"4px" }}>{rec.reason}</div>
+            </div>
+          )}
+
+          {last && (
+            <div style={{ fontSize:"11px", color:"#444", marginTop:"6px", fontStyle:"italic" }}>
+              Last: {last.dateStr} — {bw ? "" : `${last.weight}${ex.unit} · `}{last.sets}×{last.reps}{last.note ? ` · "${last.note}"` : ""}
+            </div>
+          )}
+
+          <button
+            onClick={() => setOpen(o => !o)}
+            style={{ marginTop:"12px", background:"transparent", border:`1px solid ${open ? "#333" : sessionColor}`, borderRadius:"2px",
+              padding:"8px 16px", cursor:"pointer", fontSize:"12px", letterSpacing:"2px",
+              textTransform:"uppercase", color: open ? "#666" : sessionColor, fontFamily:"inherit" }}>
+            {open ? "Cancel" : "+ Log"}
+          </button>
+
+          {open && (
+            <div style={{ marginTop:"12px", background:"#111", border:"1px solid #222", borderRadius:"2px", padding:"14px", display:"flex", flexDirection:"column", gap:"12px" }}>
+              <div style={{ display:"flex", gap:"12px", flexWrap:"wrap" }}>
+                {!bw && (
+                  <label style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                    <span style={{ fontSize:"10px", letterSpacing:"2px", textTransform:"uppercase", color:"#555" }}>Weight ({ex.unit})</span>
+                    <input type="number" inputMode="decimal" value={w} onChange={e => setW(+e.target.value)} style={{ ...inp, width:"90px" }} />
+                  </label>
+                )}
+                <label style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                  <span style={{ fontSize:"10px", letterSpacing:"2px", textTransform:"uppercase", color:"#555" }}>Sets</span>
+                  <input type="number" inputMode="numeric" value={s} onChange={e => setS(+e.target.value)} style={{ ...inp, width:"70px" }} />
+                </label>
+                <label style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                  <span style={{ fontSize:"10px", letterSpacing:"2px", textTransform:"uppercase", color:"#555" }}>Reps</span>
+                  <input type="number" inputMode="numeric" value={r} onChange={e => setR(+e.target.value)} style={{ ...inp, width:"70px" }} />
+                </label>
+              </div>
+              <label style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                <span style={{ fontSize:"10px", letterSpacing:"2px", textTransform:"uppercase", color:"#555" }}>Note (optional)</span>
+                <input type="text" value={note} onChange={e => setNote(e.target.value)}
+                  placeholder="felt strong / back tight / etc."
+                  style={{ ...inp, width:"100%" }} />
+              </label>
+              <button
+                onClick={() => {
+                  onLog(ex.key, { weight:w, reps:r, sets:s, note, dateStr: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}), ts: Date.now() });
+                  setOpen(false); setNote("");
+                }}
+                style={{ background:sessionColor, border:"none", borderRadius:"2px", padding:"10px 22px",
+                  cursor:"pointer", fontSize:"12px", letterSpacing:"2px", textTransform:"uppercase",
+                  color:"#0F0F0F", fontFamily:"inherit", fontWeight:"bold", alignSelf:"flex-start" }}>
+                Save
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── SESSION PANEL ──────────────────────────────────────────────────────
+    function SessionPanel({ session, log, onLog, isActive }) {
+      const [showWhy, setShowWhy] = useState(false);
+      return (
+        <div>
+          <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px", flexWrap:"wrap" }}>
+            <span style={{ fontSize:"9px", letterSpacing:"3px", textTransform:"uppercase", color:session.color, border:`1px solid ${session.color}44`, padding:"3px 9px", borderRadius:"1px" }}>{session.tag}</span>
+            <span style={{ fontSize:"10px", letterSpacing:"2px", color:"#444", textTransform:"uppercase" }}>{session.duration}</span>
+            {isActive && <span style={{ fontSize:"9px", letterSpacing:"2px", color:"#E8C547", textTransform:"uppercase" }}>▶ Up Next</span>}
+          </div>
+          <h2 style={{ fontSize:"clamp(20px,5vw,28px)", fontWeight:"normal", margin:"0 0 16px", color:"#F0E8D8", letterSpacing:"-0.5px" }}>
+            Session {session.id}: {session.label}
+          </h2>
+
+          <button onClick={() => setShowWhy(w => !w)}
+            style={{ background:"transparent", border:"1px solid #222", borderRadius:"2px",
+              padding:"8px 14px", cursor:"pointer", fontFamily:"inherit", fontSize:"11px",
+              letterSpacing:"2px", textTransform:"uppercase", color: showWhy ? "#888" : "#666",
+              marginBottom:"16px", display:"flex", alignItems:"center", gap:"8px" }}>
+            <span style={{ color:session.color }}>?</span>
+            {showWhy ? "Hide explanation" : "Why this session"}
+          </button>
+
+          {showWhy && (
+            <div style={{ background:"#0e0e0e", borderLeft:`3px solid ${session.color}`, padding:"16px 20px", marginBottom:"20px", borderRadius:"0 2px 2px 0" }}>
+              <p style={{ margin:0, fontSize:"13px", color:"#A8988A", lineHeight:"1.85" }}>{session.why}</p>
+            </div>
+          )}
+
+          <div style={{ background:"#0d0d0d", border:"1px solid #1a1a1a", borderRadius:"2px", padding:"10px 14px", marginBottom:"20px" }}>
+            <span style={{ fontSize:"9px", letterSpacing:"3px", textTransform:"uppercase", color:"#444" }}>Warmup · </span>
+            <span style={{ fontSize:"12px", color:"#666" }}>{session.warmup}</span>
+          </div>
+
+          <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+            {session.exercises.map(ex => (
+              <ExCard key={ex.key} ex={ex} log={log} onLog={onLog} sessionColor={session.color} />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ── HISTORY TAB ────────────────────────────────────────────────────────
+    function HistoryTab({ log }) {
+      const rows = [];
+      for (const [key, entries] of Object.entries(log)) {
+        let ex = null;
+        for (const s of SESSIONS) { const f = s.exercises.find(e => e.key === key); if (f) { ex = f; break; } }
+        if (!ex) continue;
+        for (const e of entries) rows.push({ ...e, exName: ex.name, unit: ex.unit });
+      }
+      rows.sort((a,b) => b.ts - a.ts);
+      if (rows.length === 0) return <p style={{ color:"#555", fontSize:"13px", fontStyle:"italic", padding:"8px 0" }}>No workouts logged yet. Start a session to see your history here.</p>;
+      return (
+        <div>
+          <div style={{ fontSize:"9px", letterSpacing:"3px", textTransform:"uppercase", color:"#555", marginBottom:"16px" }}>Recent Activity</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
+            {rows.slice(0,40).map((e,i) => (
+              <div key={i} style={{ display:"grid", gridTemplateColumns:"70px 1fr auto", gap:"10px", alignItems:"center",
+                padding:"10px 14px", background:"#0d0d0d", border:"1px solid #1a1a1a", borderRadius:"2px" }}>
+                <span style={{ fontSize:"10px", color:"#444" }}>{e.dateStr}</span>
+                <span style={{ fontSize:"13px", color:"#B8A898" }}>{e.exName}</span>
+                <span style={{ fontSize:"11px", color:"#666", fontFamily:"monospace" }}>
+                  {e.unit !== "BW" ? `${e.weight}${e.unit} · ` : ""}{e.sets}×{e.reps}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ── MAIN APP ───────────────────────────────────────────────────────────
+    function App() {
+      const [tab,      setTab]      = useState("today");
+      const [log,      setLog]      = useState(() => loadLog());
+      const [rotation, setRotation] = useState(() => loadRotation());
+
+      const handleLog = (exKey, entry) => {
+        const updated = { ...log, [exKey]: [...(log[exKey] || []), entry] };
+        setLog(updated); saveLog(updated);
+      };
+
+      const handleFinish = () => {
+        const cur  = SESSIONS[rotation.current];
+        const next = (rotation.current + 1) % 3;
+        const updated = {
+          current: next,
+          history: [...rotation.history, { session: cur.id, label: cur.label, dateStr: new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"}), ts: Date.now() }].slice(-20),
+        };
+        setRotation(updated); saveRotation(updated);
+      };
+
+      const cur = SESSIONS[rotation.current];
+      const nxt = SESSIONS[(rotation.current + 1) % 3];
+
+      return (
+        <div style={{ fontFamily:"Georgia,'Times New Roman',serif", background:"#0F0F0F", minHeight:"100vh", color:"#E8E0D0" }}>
+
+          {/* Header */}
+          <div style={{ borderBottom:"1px solid #181818", padding:"20px 20px 0", paddingTop:"calc(20px + env(safe-area-inset-top))" }}>
+            <div style={{ fontSize:"9px", letterSpacing:"4px", color:"#333", textTransform:"uppercase", marginBottom:"4px" }}>Training Program</div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"8px", paddingBottom:"14px" }}>
+              <h1 style={{ fontSize:"clamp(18px,5vw,28px)", fontWeight:"normal", margin:0, color:"#F0E8D8", letterSpacing:"-0.5px" }}>
+                {tab === "today"
+                  ? <span>Up Next: <span style={{ color: cur.color }}>Session {cur.id}</span></span>
+                  : tab === "sessions" ? "All Sessions" : "Workout Log"}
+              </h1>
+              {tab === "today" && (
+                <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+                  <span style={{ fontSize:"9px", color:"#444", letterSpacing:"1px" }}>then →</span>
+                  <span style={{ fontSize:"9px", letterSpacing:"2px", textTransform:"uppercase", color:nxt.color, border:`1px solid ${nxt.color}44`, padding:"2px 8px", borderRadius:"1px" }}>{nxt.tag}</span>
+                </div>
+              )}
+            </div>
+
+            {tab === "today" && (
+              <div style={{ display:"flex", gap:"4px", marginBottom:"-1px" }}>
+                {SESSIONS.map((s,i) => (
+                  <div key={s.id} style={{ height:"2px", flex:1, background: i === rotation.current ? s.color : "#1a1a1a", transition:"background 0.3s" }} />
+                ))}
+              </div>
+            )}
+
+            <div style={{ display:"flex" }}>
+              {[["today","Today"],["sessions","Sessions"],["history","Log"]].map(([k,l]) => (
+                <button key={k} onClick={() => setTab(k)}
+                  style={{ background:"none", border:"none", cursor:"pointer", padding:"14px 16px 12px",
+                    fontSize:"11px", letterSpacing:"2px", textTransform:"uppercase", fontFamily:"inherit",
+                    color: tab===k ? "#E8C547" : "#444",
+                    borderBottom: tab===k ? "2px solid #E8C547" : "2px solid transparent" }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div style={{ padding:"20px", maxWidth:"660px" }}>
+
+            {tab === "today" && (
+              <div>
+                <SessionPanel session={cur} log={log} onLog={handleLog} isActive />
+                <div style={{ marginTop:"32px", paddingTop:"24px", borderTop:"1px solid #181818" }}>
+                  <button onClick={handleFinish}
+                    style={{ background:cur.color, border:"none", borderRadius:"2px", padding:"13px 24px",
+                      cursor:"pointer", fontFamily:"inherit", fontSize:"11px", letterSpacing:"3px",
+                      textTransform:"uppercase", color:"#0F0F0F", fontWeight:"bold", width:"100%" }}>
+                    ✓ Done — Next: Session {nxt.id} · {nxt.tag}
+                  </button>
+                  {rotation.history.length > 0 && (
+                    <div style={{ marginTop:"16px" }}>
+                      <div style={{ fontSize:"9px", letterSpacing:"2px", textTransform:"uppercase", color:"#333", marginBottom:"8px" }}>Recent</div>
+                      {rotation.history.slice(-4).reverse().map((h,i) => (
+                        <div key={i} style={{ fontSize:"12px", color:"#444", marginBottom:"4px" }}>
+                          {h.dateStr} · Session {h.session}: {h.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {tab === "sessions" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:"28px" }}>
+                {SESSIONS.map(s => (
+                  <div key={s.id} style={{ border:"1px solid #1a1a1a", borderRadius:"2px", padding:"20px" }}>
+                    <SessionPanel session={s} log={log} onLog={handleLog} isActive={s.id === cur.id} />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tab === "history" && <HistoryTab log={log} />}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
