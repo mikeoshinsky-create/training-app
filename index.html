@@ -624,7 +624,7 @@ function SettingsTab({ settings, onToggleHamptons, onReset }) {
 }
 
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
-export default function App() {
+function App() {
   const [tab,       setTab]      = useState("today");
   const [log,       setLog]      = useState(()=>load(SK)||{});
   const [rotation,  setRotation] = useState(()=>load(RK)||{current:0,history:[],cycle:1});
